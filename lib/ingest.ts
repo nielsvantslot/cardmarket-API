@@ -54,6 +54,21 @@ export async function upsertPricesAndHistory(
       p.productId, p.avg, p.low, p.trend, p.avg1, p.avg7, p.avg30,
     ]);
 
+    // Insert history BEFORE upserting prices so IS DISTINCT FROM compares old values
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO price_history ("productId", avg, low, trend, "recordedAt")
+      SELECT n."productId", n.avg, n.low, n.trend, NOW()
+      FROM (VALUES ${priceValues.map((_, i) => {
+        const o = i * 7;
+        return `($${o+1}::int,$${o+2}::float,$${o+3}::float,$${o+4}::float,$${o+5}::float,$${o+6}::float,$${o+7}::float)`;
+      }).join(",")}) AS n("productId", avg, low, trend, avg1, avg7, avg30)
+      LEFT JOIN prices p ON p."productId" = n."productId"
+      WHERE p."productId" IS NULL
+         OR p.avg IS DISTINCT FROM n.avg
+         OR p.low IS DISTINCT FROM n.low
+         OR p.trend IS DISTINCT FROM n.trend
+    `, ...priceValues.flat());
+
     await prisma.$executeRawUnsafe(`
       INSERT INTO prices ("productId", avg, low, trend, avg1, avg7, avg30, "updatedAt")
       VALUES ${priceValues.map((_, i) => {
@@ -68,21 +83,6 @@ export async function upsertPricesAndHistory(
         avg7 = EXCLUDED.avg7,
         avg30 = EXCLUDED.avg30,
         "updatedAt" = NOW()
-    `, ...priceValues.flat());
-
-    // Insert history only for rows where avg/low/trend changed
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO price_history ("productId", avg, low, trend, "recordedAt")
-      SELECT n."productId", n.avg, n.low, n.trend, NOW()
-      FROM (VALUES ${priceValues.map((_, i) => {
-        const o = i * 7;
-        return `($${o+1}::int,$${o+2}::float,$${o+3}::float,$${o+4}::float,$${o+5}::float,$${o+6}::float,$${o+7}::float)`;
-      }).join(",")}) AS n("productId", avg, low, trend, avg1, avg7, avg30)
-      LEFT JOIN prices p ON p."productId" = n."productId"
-      WHERE p."productId" IS NULL
-         OR p.avg IS DISTINCT FROM n.avg
-         OR p.low IS DISTINCT FROM n.low
-         OR p.trend IS DISTINCT FROM n.trend
     `, ...priceValues.flat());
 
     console.log(`Processed prices ${i + 1}–${Math.min(i + BATCH_SIZE, entries.length)}`);
