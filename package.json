@@ -1,0 +1,25 @@
+{
+  "name": "cardmarket-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "prisma generate",
+    "postinstall": "prisma generate",
+    "dev": "vercel dev",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0",
+    "prisma": "^5.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@vercel/node": "^3.2.8",
+    "typescript": "^5.4.5"
+  }
+}
