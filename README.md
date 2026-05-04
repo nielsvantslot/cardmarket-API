@@ -13,7 +13,7 @@ Cardmarket data ingestion + API service running on Vercel + PostgreSQL (Prisma).
    ```bash
    npm run db:up
    ```
-   Spins up Postgres 16 on `localhost:5432`. Credentials are pre-configured in `.env`.
+   Spins up Postgres 16 on `localhost:5433`. Credentials are pre-configured in `.env`.
 
 3. Push the schema:
    ```bash
