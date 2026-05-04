@@ -63,7 +63,12 @@ export async function upsertPricesAndHistory(
         return `($${o+1}::int,$${o+2}::float,$${o+3}::float,$${o+4}::float,$${o+5}::float,$${o+6}::float,$${o+7}::float)`;
       }).join(",")}) AS n("productId", avg, low, trend, avg1, avg7, avg30)
       LEFT JOIN prices p ON p."productId" = n."productId"
-      WHERE p."productId" IS NULL
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM price_history ph
+        WHERE ph."productId" = n."productId"
+          )
+         OR p."productId" IS NULL
          OR p.avg IS DISTINCT FROM n.avg
          OR p.low IS DISTINCT FROM n.low
          OR p.trend IS DISTINCT FROM n.trend
