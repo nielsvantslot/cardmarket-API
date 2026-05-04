@@ -25,7 +25,7 @@ export interface RawPriceGuideEntry {
 }
 
 export interface RawPriceGuide {
-  priceGuide: RawPriceGuideEntry[];
+  priceGuides: RawPriceGuideEntry[];
 }
 
 export interface RawProductList {

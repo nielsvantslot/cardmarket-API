@@ -32,7 +32,7 @@ export async function fetchAllData(): Promise<{
   ]);
 
   const priceMap = new Map<number, NormalizedPrice>();
-  for (const entry of priceGuideRaw.priceGuide ?? []) {
+  for (const entry of priceGuideRaw.priceGuides ?? []) {
     priceMap.set(entry.idProduct, normalizePrice(entry));
   }
 
