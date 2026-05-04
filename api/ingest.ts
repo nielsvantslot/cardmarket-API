@@ -18,10 +18,8 @@ export default async function handler(
     const { products, prices } = await fetchAllData();
     console.log(`Fetched ${products.length} products, ${prices.size} price entries`);
 
-    await Promise.all([
-      upsertProducts(products),
-      upsertPricesAndHistory(prices),
-    ]);
+    await upsertProducts(products);
+    await upsertPricesAndHistory(prices);
 
     console.log(`Ingest complete in ${Date.now() - start}ms`);
 
