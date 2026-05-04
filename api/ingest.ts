@@ -12,27 +12,33 @@ export default async function handler(
   }
 
   try {
-    console.log("Ingest started");
     const start = Date.now();
+    console.log("Ingest started");
 
     const { products, prices } = await fetchAllData();
     console.log(`Fetched ${products.length} products, ${prices.size} price entries`);
 
-    await upsertProducts(products);
-    await upsertPricesAndHistory(prices);
-
-    const elapsed = Date.now() - start;
-    console.log(`Ingest completed in ${elapsed}ms`);
-
+    // Respond immediately — writes continue in background
     res.status(200).json({
       ok: true,
       products: products.length,
       prices: prices.size,
-      elapsedMs: elapsed,
+      fetchMs: Date.now() - start,
     });
+
+    // Run products + prices in parallel, don't block the response
+    await Promise.all([
+      upsertProducts(products),
+      upsertPricesAndHistory(prices),
+    ]);
+
+    console.log(`Ingest complete in ${Date.now() - start}ms`);
   } catch (err) {
     console.error("Ingest error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
-    res.status(500).json({ error: message });
+    // Only reachable if fetchAllData throws (res not sent yet)
+    if (!res.headersSent) {
+      res.status(500).json({ error: message });
+    }
   }
 }

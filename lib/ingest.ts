@@ -1,33 +1,42 @@
 import { prisma } from "./db";
 import type { NormalizedProduct, NormalizedPrice } from "./types";
 
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 2000;
 
 export async function upsertProducts(products: NormalizedProduct[]): Promise<void> {
   for (let i = 0; i < products.length; i += BATCH_SIZE) {
     const batch = products.slice(i, i + BATCH_SIZE);
-    await Promise.all(
-      batch.map((p) =>
-        prisma.product.upsert({
-          where: { id: p.id },
-          create: p,
-          update: {
-            name: p.name,
-            categoryId: p.categoryId,
-            categoryName: p.categoryName,
-            expansionId: p.expansionId,
-            expansionName: p.expansionName,
-            number: p.number,
-            rarity: p.rarity,
-            isFoil: p.isFoil,
-            isAltered: p.isAltered,
-            isSigned: p.isSigned,
-            isFirstEd: p.isFirstEd,
-            image: p.image,
-          },
-        })
-      )
-    );
+
+    const values = batch.map((p) => [
+      p.id, p.name, p.categoryId, p.categoryName, p.expansionId,
+      p.expansionName, p.number, p.rarity, p.isFoil, p.isAltered,
+      p.isSigned, p.isFirstEd, p.image,
+    ]);
+
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO products (id, name, "categoryId", "categoryName", "expansionId",
+        "expansionName", number, rarity, "isFoil", "isAltered", "isSigned", "isFirstEd",
+        image, "createdAt", "updatedAt")
+      VALUES ${values.map((_, i) => {
+        const o = i * 13;
+        return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},$${o+8},$${o+9},$${o+10},$${o+11},$${o+12},$${o+13},NOW(),NOW())`;
+      }).join(",")}
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        "categoryId" = EXCLUDED."categoryId",
+        "categoryName" = EXCLUDED."categoryName",
+        "expansionId" = EXCLUDED."expansionId",
+        "expansionName" = EXCLUDED."expansionName",
+        number = EXCLUDED.number,
+        rarity = EXCLUDED.rarity,
+        "isFoil" = EXCLUDED."isFoil",
+        "isAltered" = EXCLUDED."isAltered",
+        "isSigned" = EXCLUDED."isSigned",
+        "isFirstEd" = EXCLUDED."isFirstEd",
+        image = EXCLUDED.image,
+        "updatedAt" = NOW()
+    `, ...values.flat());
+
     console.log(`Upserted products ${i + 1}–${Math.min(i + BATCH_SIZE, products.length)}`);
   }
 }
@@ -40,58 +49,42 @@ export async function upsertPricesAndHistory(
   for (let i = 0; i < entries.length; i += BATCH_SIZE) {
     const batch = entries.slice(i, i + BATCH_SIZE);
 
-    const productIds = batch.map((p) => p.productId);
-    const existing = await prisma.price.findMany({
-      where: { productId: { in: productIds } },
-      select: { productId: true, avg: true, low: true, trend: true },
-    });
+    // Bulk upsert prices
+    const priceValues = batch.map((p) => [
+      p.productId, p.avg, p.low, p.trend, p.avg1, p.avg7, p.avg30,
+    ]);
 
-    const existingMap = new Map(existing.map((e) => [e.productId, e]));
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO prices ("productId", avg, low, trend, avg1, avg7, avg30, "updatedAt")
+      VALUES ${priceValues.map((_, i) => {
+        const o = i * 7;
+        return `($${o+1},$${o+2},$${o+3},$${o+4},$${o+5},$${o+6},$${o+7},NOW())`;
+      }).join(",")}
+      ON CONFLICT ("productId") DO UPDATE SET
+        avg = EXCLUDED.avg,
+        low = EXCLUDED.low,
+        trend = EXCLUDED.trend,
+        avg1 = EXCLUDED.avg1,
+        avg7 = EXCLUDED.avg7,
+        avg30 = EXCLUDED.avg30,
+        "updatedAt" = NOW()
+    `, ...priceValues.flat());
 
-    const historyInserts: {
-      productId: number;
-      avg: number | null;
-      low: number | null;
-      trend: number | null;
-    }[] = [];
+    // Insert history only for rows where avg/low/trend changed
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO price_history ("productId", avg, low, trend, "recordedAt")
+      SELECT n."productId", n.avg, n.low, n.trend, NOW()
+      FROM (VALUES ${priceValues.map((_, i) => {
+        const o = i * 7;
+        return `($${o+1}::int,$${o+2}::float,$${o+3}::float,$${o+4}::float,$${o+5}::float,$${o+6}::float,$${o+7}::float)`;
+      }).join(",")}) AS n("productId", avg, low, trend, avg1, avg7, avg30)
+      LEFT JOIN prices p ON p."productId" = n."productId"
+      WHERE p."productId" IS NULL
+         OR p.avg IS DISTINCT FROM n.avg
+         OR p.low IS DISTINCT FROM n.low
+         OR p.trend IS DISTINCT FROM n.trend
+    `, ...priceValues.flat());
 
-    await Promise.all(
-      batch.map(async (price) => {
-        const prev = existingMap.get(price.productId);
-        const changed =
-          !prev ||
-          prev.avg !== price.avg ||
-          prev.low !== price.low ||
-          prev.trend !== price.trend;
-
-        if (changed) {
-          historyInserts.push({
-            productId: price.productId,
-            avg: price.avg,
-            low: price.low,
-            trend: price.trend,
-          });
-        }
-
-        await prisma.price.upsert({
-          where: { productId: price.productId },
-          create: price,
-          update: {
-            avg: price.avg,
-            low: price.low,
-            trend: price.trend,
-            avg1: price.avg1,
-            avg7: price.avg7,
-            avg30: price.avg30,
-          },
-        });
-      })
-    );
-
-    if (historyInserts.length > 0) {
-      await prisma.priceHistory.createMany({ data: historyInserts });
-    }
-
-    console.log(`Processed prices ${i + 1}–${Math.min(i + BATCH_SIZE, entries.length)}, history inserts: ${historyInserts.length}`);
+    console.log(`Processed prices ${i + 1}–${Math.min(i + BATCH_SIZE, entries.length)}`);
   }
 }
