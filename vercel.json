@@ -1,4 +1,6 @@
 {
+  "outputDirectory": ".",
+  "buildCommand": "prisma generate",
   "crons": [
     {
       "path": "/api/ingest",
