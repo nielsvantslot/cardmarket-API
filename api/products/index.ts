@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { prisma } from "../../../lib/db";
+import { prisma } from "../../lib/db";
 
 function parseBoundedInt(value: string | undefined, fallback: number, min: number, max: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -16,33 +16,41 @@ export default async function handler(
     return;
   }
 
-  const rawId = req.query["id"];
-  const id = parseInt(Array.isArray(rawId) ? rawId[0] : rawId ?? "", 10);
-
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid product id" });
-    return;
-  }
+  const rawQ = req.query["q"];
+  const q = (Array.isArray(rawQ) ? rawQ[0] : rawQ ?? "").trim();
 
   const rawLimit = req.query["limit"];
-  const limit = parseBoundedInt(Array.isArray(rawLimit) ? rawLimit[0] : rawLimit, 100, 1, 500);
+  const rawOffset = req.query["offset"];
+  const limit = parseBoundedInt(Array.isArray(rawLimit) ? rawLimit[0] : rawLimit, 20, 1, 100);
+  const offset = parseBoundedInt(Array.isArray(rawOffset) ? rawOffset[0] : rawOffset, 0, 0, 1000000);
 
   try {
-    const history = await prisma.priceHistory.findMany({
-      where: { productId: id },
-      orderBy: { recordedAt: "desc" },
+    const products = await prisma.product.findMany({
+      where: q
+        ? {
+            name: {
+              contains: q,
+              mode: "insensitive",
+            },
+          }
+        : undefined,
+      include: { price: true },
       take: limit,
+      skip: offset,
+      orderBy: { id: "asc" },
     });
 
     res.status(200).json({
-      data: history,
+      data: products,
       meta: {
         limit,
-        count: history.length,
+        offset,
+        count: products.length,
+        q,
       },
     });
   } catch (err) {
-    console.error("History lookup error:", err);
+    console.error("Products list error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: message });
   }

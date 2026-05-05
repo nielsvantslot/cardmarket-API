@@ -3,7 +3,7 @@
   "buildCommand": "prisma generate",
   "crons": [
     {
-      "path": "/api/ingest",
+      "path": "/api/service/ingest",
       "schedule": "0 3 * * *"
     }
   ],

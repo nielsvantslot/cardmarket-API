@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { fetchAllData } from "../lib/fetch";
-import { upsertProducts, upsertPricesAndHistory } from "../lib/ingest";
+import { fetchAllData } from "../../lib/fetch";
+import { upsertProducts, upsertPricesAndHistory } from "../../lib/ingest";
 
 export default async function handler(
   req: VercelRequest,
@@ -32,7 +32,6 @@ export default async function handler(
   } catch (err) {
     console.error("Ingest error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
-    // Only reachable if fetchAllData throws (res not sent yet)
     if (!res.headersSent) {
       res.status(500).json({ error: message });
     }

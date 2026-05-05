@@ -25,7 +25,7 @@ Cardmarket data ingestion + API service running on Vercel + PostgreSQL (Prisma).
    npm run dev
    ```
 
-Then trigger ingestion at `http://localhost:3000/api/ingest`.
+Then trigger ingestion at `http://localhost:3000/api/service/ingest`.
 
 ### DB helper scripts
 
@@ -43,11 +43,21 @@ Set `DATABASE_URL` in Vercel dashboard, then:
 vercel deploy
 ```
 
-## Endpoints
+## Public API
+
+Swagger UI is available at `/api/docs`.
+Raw OpenAPI JSON is available at `/api/openapi`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/ingest` | Trigger data ingestion (also runs daily via cron) |
+| GET | `/api/products` | List products (supports `q`, `limit`, `offset`) |
 | GET | `/api/products/[id]` | Get product + latest price by ID |
-| GET | `/api/search?q=...` | Search products by name (max 20) |
-| GET | `/api/products/[id]/history` | Last 100 price history entries |
+| GET | `/api/products/[id]/history` | Price history for a product (supports `limit`) |
+
+## Internal Service Routes
+
+These routes are intentionally excluded from the public Swagger spec:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET / POST | `/api/service/ingest` | Trigger data ingestion (also runs daily via cron) |
